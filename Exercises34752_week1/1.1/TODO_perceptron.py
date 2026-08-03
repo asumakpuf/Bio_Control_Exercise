@@ -21,6 +21,12 @@ class SignActivation(ActivationFunction):
    """
    # TODO: Define the correct return function, given input `x``
    def forward(self, x):
+
+      fx = 0
+      if x > 0:
+         fx = 1
+
+      return fx
       """
          TODO: Return the output of the activation function, given input `x`
       """
@@ -29,23 +35,24 @@ class SignActivation(ActivationFunction):
       """
          TODO: Return the derivatinve of the activation function, given input `x`
       """
-      return None
+      return 0
 
 
 class Sigmoid(ActivationFunction):
+
    def forward(self, x):
-      return
+      return 1 / (1 + np.exp(-x))
+      
    def gradient(self, x):
-      return
+      fx = self.forward(x)
+      return fx * (1 - fx)
 
 
 class LinearActivation(ActivationFunction):
    def forward(self, x):
-      return
+      return x
    def gradient(self, x):
-      return
-
-
+      return 1
 
 class Perceptron:
    """ 
@@ -65,9 +72,13 @@ class Perceptron:
       if not isinstance(act_f, type) or not issubclass(act_f, ActivationFunction):
          raise TypeError('act_f has to be a subclass of ActivationFunction (not a class instance).')
       # weights
-      self.w = #np.random.normal(mean, standard deviation, size)
+      self.w = np.random.normal(
+         loc=0.0,
+         scale=0.1,
+         size=n_inputs + 1
+      )      
       # activation function
-      self.f =
+      self.f = act_f()
 
       if self.f is not None and not isinstance(self.f, ActivationFunction):
          raise TypeError("self.f should be a class instance.")
@@ -78,7 +89,7 @@ class Perceptron:
          TODO: Fill in the function to provide the correct output
          NB: Remember the bias
       """
-      a = 
+      a = self.w[0] + np.dot(self.w[1:], x)
       return a
 
    def output(self, a):
@@ -86,15 +97,13 @@ class Perceptron:
          It computes the neuron output `y`, given the activation `a`
          TODO: Fill in the function to provide the correct output
       """
-      y = 
+      y = self.f.forward(a)
       return y
 
    def predict(self, x):
-      """
-         It computes the neuron output `y`, given the input `x`
-         TODO: Fill in the function to provide the correct output
-      """
-      return None
+      a = self.activation(x)
+      y = self.output(a)
+      return y
 
    def gradient(self, a):
       """
@@ -111,12 +120,12 @@ if __name__ == '__main__':
    print(ydata)
    
 ## TODO Test your activation function
-a = 
+a = Sigmoid()
 print(a.forward(2))
-"print(a.forward(0))"
+print(a.forward(0))
 
 ## TODO Test Perceptron initialization
-p = 
+p = Perceptron(2, Sigmoid)
 ## Test the predict function for each of the data points given in x
 print(p.predict(xdata[0,:]) )
 
@@ -126,10 +135,42 @@ r = 0.1 # learning rate - change it to see how it affects the learning process
 ## print the final weights after learning
 print(p.w)
 
-## TODO plot points and linear decision boundary
-## Make a plot of the data points with different colors, together with the linear decision boundary defined by the learned weights
+n_epochs = 100
 
-plt.plot(xp,yp, 'k--')
-plt.xlabel('x1')
-plt.ylabel('x2')
+for epoch in range(n_epochs):
+   for x, y_true in zip(xdata, ydata):
+      y_pred = p.predict(x)
+      error = y_true - y_pred
+
+      p.w[0] += r * error
+      p.w[1:] += r * error * x
+
+print("Final weights:", p.w)
+
+# Create decision boundary
+xp = np.linspace(
+   xdata[:, 0].min() - 0.5,
+   xdata[:, 0].max() + 0.5,
+   100
+)
+
+yp = -(p.w[0] + p.w[1] * xp) / p.w[2]
+
+# Plot data
+plt.scatter(
+   xdata[ydata == 0, 0],
+   xdata[ydata == 0, 1],
+   label="Class 0"
+)
+
+plt.scatter(
+   xdata[ydata == 1, 0],
+   xdata[ydata == 1, 1],
+   label="Class 1"
+)
+
+plt.plot(xp, yp, "k--", label="Decision boundary")
+plt.xlabel("x1")
+plt.ylabel("x2")
+plt.legend()
 plt.show()
