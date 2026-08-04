@@ -197,7 +197,7 @@ if __name__ == "__main__":
    #  6/7. Train a fresh network as an XOR gate, compare learning rates
    
    n_epochs = 20000
-   learning_rates = [0.1, 0.5, 1, 2, 5]
+   learning_rates = [0.1, 0.5, 1, 1.5, 2]
 
    plt.figure()
    for r in learning_rates:
@@ -211,6 +211,8 @@ if __name__ == "__main__":
       print(f"alpha={r:>5}: final MSE={mse_history[-1]:.6g}")
 
    plt.yscale("log")
+   plt.ylim(1e-9, 1e3)  # fixed window: keeps converged curves (~1e-27) and
+                        # diverging ones on a readable common scale
    plt.xlabel("Epoch")
    plt.ylabel("MSE")
    plt.title("XOR training: MSE vs epoch for different learning rates")
