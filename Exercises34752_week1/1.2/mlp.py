@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from perceptron import Perceptron
 from activation import Sigmoid, LinearActivation
@@ -115,7 +116,7 @@ class MLP:
          a_out = self.l_out.activation(o1)
          o_out = self.l_out.output(a_out)
 
-         # Backpropagation (eq. 7 and eq. 8: error defined as (y - t))
+         # Backpropagation 
          error = o_out - target
          delta_out = error * self.l_out.gradient(a_out)
          delta1 = self.l_out.w[1:, :].dot(delta_out) * self.l1.gradient(a1)
@@ -127,7 +128,7 @@ class MLP:
          dw1 += np.outer(o0, delta1)
          dw3 += np.outer(o1_aug, delta_out)
 
-      # Update weights (eq. 9: batch-averaged, gradient-descent step)
+      # Update weights 
       self.l1.update_weights(-(self.alpha / N) * dw1)
       self.l_out.update_weights(-(self.alpha / N) * dw3)
 
@@ -157,7 +158,6 @@ def calc_prediction_error(model, x, t):
 
 
 if __name__ == "__main__":
-   import matplotlib.pyplot as plt
 
    # 1. Test the Sigmoid and LinearActivation functions  
    xs = np.linspace(-5, 5, 11)
