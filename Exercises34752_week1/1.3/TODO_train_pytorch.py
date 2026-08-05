@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 import torch
 import torch_model
 
@@ -24,10 +25,17 @@ x = torch.from_numpy(end_pos.T).float()
 y = torch.from_numpy(angles.T).float()
 # TODO split the training set and test set
 # Eventually normalize the data
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)   
+
+# Normalization of the data
+x_mean, x_std = x_train.mean(0), x_train.std(0)
+x_train = (x_train - x_mean) / x_std
+x_test  = (x_test  - x_mean) / x_std
+
 
 if device == 'cuda':
-    x = x.cuda()
-    y = y.cuda()
+    x = x_train.cuda()
+    y = y_train.cuda()
 
 # Define neural network - an example
 model = torch_model.MLPNet(2, 16, 2)
@@ -38,7 +46,7 @@ loss_func = torch.nn.MSELoss()
 num_epochs = 500000
 
 #h = 16
-#g = 0.999
+g = 0.999
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=g)
 
 l_vec = np.zeros(num_epochs)
@@ -59,6 +67,7 @@ for t in tqdm(range(num_epochs)):
     l_vec[t] = l.numpy()
 
     # TODO Test the network
+    
 
 plt.plot(l_vec)
 plt.yscale('log')
