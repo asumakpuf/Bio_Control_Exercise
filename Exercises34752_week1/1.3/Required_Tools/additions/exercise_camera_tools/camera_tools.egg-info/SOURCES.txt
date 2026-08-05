@@ -1,0 +1,8 @@
+setup.py
+camera_tools/__init__.py
+camera_tools/camera_tools.py
+camera_tools/colorpicker.py
+camera_tools.egg-info/PKG-INFO
+camera_tools.egg-info/SOURCES.txt
+camera_tools.egg-info/dependency_links.txt
+camera_tools.egg-info/top_level.txt
