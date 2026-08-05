@@ -3,8 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import torch
-import torch_model
-
+import TODO_torch_model as torch_model
 from tqdm import tqdm # progress bar
 
 # Load data
@@ -32,45 +31,54 @@ x_mean, x_std = x_train.mean(0), x_train.std(0)
 x_train = (x_train - x_mean) / x_std
 x_test  = (x_test  - x_mean) / x_std
 
-
-if device == 'cuda':
-    x = x_train.cuda()
-    y = y_train.cuda()
+x_train = x_train.to(device)
+x_test = x_test.to(device)
+y_train = y_train.to(device)
+y_test = y_test.to(device)
 
 # Define neural network - an example
-model = torch_model.MLPNet(2, 16, 2)
+model = torch_model.MLPNet(2, 16, 2).to(device)
 # model = torch_model.Net(n_feature=2, n_hidden1=h, n_hidden2=h, n_output=2)
 #print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 loss_func = torch.nn.MSELoss()
-num_epochs = 500000
+num_epochs = 500
 
 #h = 16
 g = 0.999
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=g)
 
-l_vec = np.zeros(num_epochs)
+train_loss_vec = np.zeros(num_epochs)
+test_loss_vec = np.zeros(num_epochs)
 
 for t in tqdm(range(num_epochs)):
     # TODO Train network
-    prediction = model(x) # Forward pass prediction. Saves intermediary values required for backwards pass
-    loss = loss_func(prediction, y) # Computes the loss for each example, using the loss function defined above
+    model.train()
+    prediction = model(x_train) # Forward pass prediction. Saves intermediary values required for backwards pass
+    loss = loss_func(prediction, y_train) # Computes the loss for each example, using the loss function defined above
     optimizer.zero_grad() # Clears gradients from previous iteration
     loss.backward() # Backpropagation of errors through the network
     optimizer.step() # Updating weights
     scheduler.step()
 
-    l = loss.data
-    if device == 'cuda':
-        l = l.cpu()
-    #print(l.numpy())
-    l_vec[t] = l.numpy()
+    train_loss_vec[t] = loss.item()
 
     # TODO Test the network
+    model.eval()
+    with torch.no_grad():
+        test_prediction = model(x_test)
+        test_loss = loss_func(test_prediction, y_test)
+        test_loss_vec[t] = test_loss.item()
     
 
-plt.plot(l_vec)
+plt.figure()
+plt.plot(train_loss_vec, label='Train loss')
+plt.plot(test_loss_vec, label='Test loss')
+plt.xlabel('Epoch')
+plt.ylabel('MSE loss')
 plt.yscale('log')
+plt.legend()
+plt.tight_layout()
 
 torch.save(model.state_dict(), 'trained_model.pth')
 plt.show()

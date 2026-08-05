@@ -48,8 +48,8 @@ module = initialize_robot()
 # 2. Collect robot data and target data
 # 3. Save the data needed for the training
 
-n_t1 = 10
-n_t2 = 10
+n_t1 = 5
+n_t2 = 3
 
 t1 = np.tile(np.linspace(-85, 86, n_t1), n_t2) # repeat the vector
 t2 = np.repeat(np.linspace(0, 86, n_t2), n_t1) # repeat each element
@@ -99,7 +99,7 @@ print('Terminating')
 api.terminate()
 
 # Save data to csv and pickle files
-np.savetxt('training_data.csv', test.data, delimiter=',', header='robot_x, robot_y, target_x, target_y', comments='')
+np.savetxt('training_data.csv', test.data, delimiter=',', header='theta_x, theta_y, target_x, target_y', comments='')
 with open("training_data.p", "wb") as f:
     pickle.dump(test.data, f)
 
