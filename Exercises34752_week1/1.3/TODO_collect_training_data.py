@@ -1,6 +1,7 @@
 import numpy as np
 import camera_tools.camera_tools as ct
 import cv2
+import pickle
 import datetime
 from FableAPI.fable_init import api
 
@@ -97,5 +98,9 @@ while not result:
 print('Terminating')
 api.terminate()
 
-# TODO SAVE .csv file with robot pos data and target location x,y
+# Save data to csv and pickle files
+np.savetxt('training_data.csv', test.data, delimiter=',', header='robot_x, robot_y, target_x, target_y', comments='')
+with open("training_data.p", "wb") as f:
+    pickle.dump(test.data, f)
+
 
