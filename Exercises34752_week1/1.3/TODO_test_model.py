@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import torch_model
+import TODO_torch_model as torch_model
 import cv2
 import camera_tools as ct
 from FableAPI.fable_init import api
@@ -48,7 +48,8 @@ api.setAccurate(accurateX, accurateY, module)
 
 # TODO Load the trained model
 model = torch_model.MLPNet(2, 16, 2)
-#model.load_state_dict(torch.load('model_file_path'))
+model.load_state_dict(torch.load('/home/arian-sumak/code/DTU/Bio_Control_Exercise/trained_model.pth'))
+print("Model loaded")
 
 # dummy class for targets
 class CoordinateStore:

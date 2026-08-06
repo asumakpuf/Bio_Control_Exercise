@@ -48,7 +48,13 @@ def locate(img, low_green=None, high_green=None):
         y += h/2
 
         # draw the contour (in green)
-        cv2.rectangle(img,(x,y),(x+w,y+h),(0, 0,255),2)
+        cv2.rectangle(
+            img,
+            (int(x), int(y)),
+            (int(x + w), int(y + h)),
+            (0, 0, 255),
+            2
+        )
         cv2.circle(img, (round(x+w/2), round(y+h/2)), 5, (0, 0, 255), -1)
     else:
         x = None
