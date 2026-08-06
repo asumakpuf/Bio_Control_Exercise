@@ -1,28 +1,7 @@
 import numpy as np
 from activation import ActivationFunction
-import matplotlib.pyplot as plt
 
 
-"""
-HINT: Reuse perceptron from 1.1
-"""
-
-class SignActivation(ActivationFunction):
-   """ 
-         Sign activation: `f(x) = 1 if x > 0, 0 if x <= 0`
-   """
-   def forward(self, x):
-      """
-         This is the output function.
-         TODO: Define the correct return function, given input `x`
-      """
-      
-   def gradient(self, x):
-      """
-            Function derivative.
-            Define the correct return value (derivative), given input `x`
-      """
-      return None
 
 class Perceptron:
    """ 
@@ -42,9 +21,13 @@ class Perceptron:
       if not isinstance(act_f, type) or not issubclass(act_f, ActivationFunction):
          raise TypeError('act_f has to be a subclass of ActivationFunction (not a class instance).')
       # weights
-      self.w = #np.random.normal(mean, standard deviation, size)
+      self.w = np.random.normal(
+         loc=0.0,
+         scale=0.1,
+         size=n_inputs + 1
+      )      
       # activation function
-      self.f =
+      self.f = act_f()
 
       if self.f is not None and not isinstance(self.f, ActivationFunction):
          raise TypeError("self.f should be a class instance.")
@@ -55,7 +38,7 @@ class Perceptron:
          TODO: Fill in the function to provide the correct output
          NB: Remember the bias
       """
-      a = 
+      a = self.w[0] + np.dot(self.w[1:], x)
       return a
 
    def output(self, a):
@@ -63,15 +46,13 @@ class Perceptron:
          It computes the neuron output `y`, given the activation `a`
          TODO: Fill in the function to provide the correct output
       """
-      y = 
+      y = self.f.forward(a)
       return y
 
    def predict(self, x):
-      """
-         It computes the neuron output `y`, given the input `x`
-         TODO: Fill in the function to provide the correct output
-      """
-      return None
+      a = self.activation(x)
+      y = self.output(a)
+      return y
 
    def gradient(self, a):
       """
@@ -79,29 +60,3 @@ class Perceptron:
       """
       return self.f.gradient(a)
 
-if __name__ == '__main__':
-   data = np.array( [ [0.5, 0.5, 0], [1.0, 0, 0], [2.0, 3.0, 0], [0, 1.0, 1], [0, 2.0, 1], [1.0, 2.2, 1] ] )
-   xdata = data[:,:2]
-   ydata = data[:,2]
-   print(xdata)
-   print(ydata)
-   
-## TODO Test your activation function
-a = 
-print(a.forward(2))
-"print(a.forward(0))"
-
-## TODO Test perceptron initialization
-p = 
-print(p.predict(xdata[0,:]) )
-
-## TODO Learn the weights
-r = 0.1 # learning rate
-## calculate the error and update the weights
-print(p.w)
-## TODO plot points and linear decision boundary
-
-plt.plot(xp,yp, 'k--')
-plt.xlabel('x1')
-plt.ylabel('x2')
-plt.show()
