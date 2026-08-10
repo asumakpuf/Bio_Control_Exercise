@@ -58,14 +58,14 @@ pert_start_time = 1.2
 # Perturbation end time (s)
 pert_end_time = 1.5
 # Perturbation amplitude
-pert_amp =1
+pert_amp = 1
 #pert_amp =0
 
 # Gain and damping parameters for forward model
-Kp_forward = 5
-#Kp_forward = 0
-Kd_forward = 0.3
-#Kd_forward = 0
+#Kp_forward = 5
+Kp_forward = 0
+#Kd_forward = 0.3
+Kd_forward = 0
 
 # Gain and damping parameters for feedback model
 Kp_feedback = 5
