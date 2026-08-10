@@ -1,9 +1,20 @@
-import numpy as np
+import os
+import pickle
 import torch
 import TODO_torch_model as torch_model
 import cv2
 import camera_tools as ct
 from FableAPI.fable_init import api
+
+# Anchor file paths to this script's own folder (see TODO_train_pytorch.py).
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+with open(os.path.join(HERE, 'norm_stats.p'), 'rb') as f:
+    norm_stats = pickle.load(f)
+x_mean = torch.from_numpy(norm_stats['x_mean']).float()
+x_std  = torch.from_numpy(norm_stats['x_std']).float()
+y_mean = norm_stats['y_mean']
+y_std  = norm_stats['y_std']
 
 cam = ct.prepare_camera()
 print(cam.isOpened())  # False
@@ -33,6 +44,9 @@ def initialize_robot(module=None):
 
     return module
 
+def denormalize(thetas, mean, std):
+    return thetas * std + mean
+
 initialize_camera(cam)
 module = initialize_robot()
 
@@ -48,8 +62,7 @@ api.setAccurate(accurateX, accurateY, module)
 
 # TODO Load the trained model
 model = torch_model.MLPNet(2, 16, 2)
-model.load_state_dict(torch.load('/home/arian-sumak/code/DTU/Bio_Control_Exercise/trained_model.pth'))
-print("Model loaded")
+#model.load_state_dict(torch.load('model_file_path'))
 
 # dummy class for targets
 class CoordinateStore:
@@ -88,7 +101,9 @@ while True:
     if coordinateStore1.new:
         with torch.no_grad():
             inp = torch.tensor([coordinateStore1.point]).float()
-            outp = model(inp)
+            inp = (inp - x_mean) / x_std  # normalize input the same way training did
+            outp = denormalize(model(inp), y_mean, y_std)  # denormalize with y (angle) stats
+
             t = outp.numpy()[0]
             print(t)
         api.setPos(t[0], t[1], module)

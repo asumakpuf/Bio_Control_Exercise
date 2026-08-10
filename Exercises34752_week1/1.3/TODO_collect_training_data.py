@@ -1,12 +1,16 @@
+import os
 import numpy as np
 import camera_tools.camera_tools as ct
 import cv2
-import pickle
 import datetime
 from FableAPI.fable_init import api
 
 # We have provided camera_tools as a stand-alone python file in ~/camera_tools/camera_tools.py
 # The same functions are available in the Conda 'biocontrol' venv that is provided
+
+# Anchor file paths to this script's own folder, so saved data always ends
+# up next to the script regardless of the working directory it's run from.
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 cam = ct.prepare_camera()
 print(cam.isOpened())
@@ -48,11 +52,11 @@ module = initialize_robot()
 # 2. Collect robot data and target data
 # 3. Save the data needed for the training
 
-n_t1 = 5
-n_t2 = 3
+n_t1 = 30
+n_t2 = 30
 
-t1 = np.tile(np.linspace(-85, 86, n_t1), n_t2) # repeat the vector
-t2 = np.repeat(np.linspace(0, 86, n_t2), n_t1) # repeat each element
+t1 = np.tile(np.linspace(-90, 90, n_t1), n_t2) # repeat the vector
+t2 = np.repeat(np.linspace(0, 90, n_t2), n_t1) # repeat each element
 thetas = np.stack((t1,t2))
 
 num_datapoints = n_t1*n_t2
@@ -72,7 +76,7 @@ class TestClass:
         
         img = ct.capture_image(cam)
         x, y = ct.locate(img)
-        if (datetime.datetime.now() - self.time_of_move).total_seconds() > 2.0:
+        if (datetime.datetime.now() - self.time_of_move).total_seconds() > 1.0:
             if x is not None:
                 print(x, y)
                 tmeas1 = api.getPos(0,module)
