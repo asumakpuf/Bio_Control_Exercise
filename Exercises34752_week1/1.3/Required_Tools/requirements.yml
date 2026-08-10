@@ -1,0 +1,19 @@
+name: biocontrol
+channels:
+  - pytorch
+  - defaults
+dependencies:
+- numpy
+- scipy
+- matplotlib
+- nb_conda
+- pip
+- psutil
+- pylint
+- pyserial
+- pytorch
+- torchvision
+- pip:
+  - ./additions/fable_2_api
+  - ./additions/exercise_camera_tools
+  - opencv-python

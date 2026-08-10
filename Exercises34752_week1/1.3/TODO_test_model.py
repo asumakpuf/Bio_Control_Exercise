@@ -1,7 +1,7 @@
 import os
 import pickle
 import torch
-import torch_model
+import TODO_torch_model as torch_model
 import cv2
 import camera_tools as ct
 from FableAPI.fable_init import api
@@ -61,9 +61,8 @@ accurateY = 'HIGH'
 api.setAccurate(accurateX, accurateY, module)
 
 # TODO Load the trained model
-model = torch_model.Net(n_feature=2, n_hidden1=18, n_hidden2=18, n_output=2)
-model.load_state_dict(torch.load(os.path.join(HERE, 'trained_model.pth')))
-print("Model loaded")
+model = torch_model.MLPNet(2, 16, 2)
+#model.load_state_dict(torch.load('model_file_path'))
 
 # dummy class for targets
 class CoordinateStore:

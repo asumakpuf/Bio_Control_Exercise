@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: FableAPI
+Version: 2.0.2
+Summary: Robot simulation
+Author: ShapeRobotics
+License: MIT
+Dynamic: author
+Dynamic: license
+Dynamic: summary
