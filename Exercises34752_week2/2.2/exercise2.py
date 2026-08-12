@@ -127,7 +127,7 @@ for t in np.arange(0,int(L),dt):
 	
 	## TODO DEFINE NOISE - you can use randn
         ## TODO ADD NOISE to desired torque ang,vel,acc= Sim.plant(ang,vel,acc,desired_torque)
-        noise_cv = 0.0
+        noise_cv = 0.1
         noise = (noise_cv* np.abs(desired_torque)* np.random.randn(*np.shape(desired_torque)))
         ang,vel,acc= Sim.plant(ang,vel,acc,desired_torque+noise)
 

@@ -34,7 +34,7 @@ delay_true = 10 # time steps
 delay_estimate = 10
 
 # Training setup
-n_trials = 40
+n_trials = 300
 
 # Learning loop
 for i in range(n_trials):
@@ -185,5 +185,18 @@ ax3.legend()
 
 ## TODO: Plot change in weights
 
+plt.figure()
+
+plt.plot(w1_hist, label='w1')
+plt.plot(w2_hist, label='w2')
+
+plt.axhline(1/I, linestyle='--', label='true w1')
+plt.axhline(-dampCoeff/I, linestyle='--', label='true w2')
+
+plt.xlabel('Trial')
+plt.ylabel('Weight')
+plt.title('Learning of Forward Model')
+plt.legend()
+plt.grid()
 
 plt.show()

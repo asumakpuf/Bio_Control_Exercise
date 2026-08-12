@@ -9,7 +9,7 @@ simlen = 30
 # Output
 y = np.zeros((simlen))
 # Target
-target = 0.0
+target = 5
 
 # Controller gain
 #K = 1
