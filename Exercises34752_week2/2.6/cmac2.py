@@ -7,16 +7,23 @@ class CMAC:
     def __init__(self, n_rfs, xmin, xmax, beta=1e-3):
         """ Initialize the basis function parameters and output weights """
         self.n_rfs = n_rfs
+        self.xmin = np.asarray(xmin, dtype=float)
+        self.xmax = np.asarray(xmax, dtype=float)
+        self.n_dims = len(self.xmin)
 
-        self.mu = np.zeros((2, self.n_rfs))
-        self.sigma = np.zeros(2)
+        if self.n_dims != len(self.xmax):
+            raise ValueError("xmin and xmax must have the same length")
+
+        self.mu = np.zeros((self.n_dims, self.n_rfs))
+        self.sigma = np.zeros(self.n_dims)
         crossval = 0.8 # has to be between 0 and 1 !
 
-        for k in range(2):
-            self.sigma[k] = 0.5/np.sqrt(-np.log(crossval)) * (xmax[k] - xmin[k])/(self.n_rfs-1) # RFs cross at phi = crossval
-            self.mu[k] = np.linspace(xmin[k], xmax[k], self.n_rfs)
+        # Exercise 7: make the CMAC dimension-generic instead of hardcoding 2D.
+        for k in range(self.n_dims):
+            self.sigma[k] = 0.5/np.sqrt(-np.log(crossval)) * (self.xmax[k] - self.xmin[k])/(self.n_rfs-1) # RFs cross at phi = crossval
+            self.mu[k] = np.linspace(self.xmin[k], self.xmax[k], self.n_rfs)
         
-        self.w = np.random.normal(loc=0.0, scale=0.2, size=(self.n_rfs, self.n_rfs))
+        self.w = np.random.normal(loc=0.0, scale=0.2, size=(self.n_rfs,) * self.n_dims)
 
         self.beta = beta
 
@@ -27,14 +34,18 @@ class CMAC:
         """ Predict yhat given x
             Saves activations `B` for later weight update
         """
-        phi = np.zeros((2, self.n_rfs))
-        for k in range(2):
+        x = np.asarray(x, dtype=float)
+        if len(x) != self.n_dims:
+            raise ValueError(f"Expected {self.n_dims} inputs, got {len(x)}")
+
+        phi = np.zeros((self.n_dims, self.n_rfs))
+        for k in range(self.n_dims):
             phi[k] = GaussianBasisFunction(x[k], self.mu[k], self.sigma[k]) # for i in phi_ki at the same time
 
-        self.B = np.zeros((self.n_rfs, self.n_rfs))
-        for i in range(self.n_rfs):
-            for j in range(self.n_rfs):
-                self.B[i,j] = phi[0][i] * phi[1][j]
+        # Exercise 7: build the N-dimensional RF activation tensor.
+        self.B = phi[0]
+        for k in range(1, self.n_dims):
+            self.B = np.multiply.outer(self.B, phi[k])
 
         yhat = np.dot(self.w.ravel(), self.B.ravel()) # Element-wise multiplication and summing of all elements
 
