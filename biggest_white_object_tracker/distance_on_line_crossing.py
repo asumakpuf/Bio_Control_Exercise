@@ -5,7 +5,7 @@ import json
 import math
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
 
 import cv2
 
@@ -22,12 +22,76 @@ from track_camera import (
 )
 
 
+class FrameCapture(Protocol):
+    def read(self):
+        ...
+
+    def release(self) -> None:
+        ...
+
+    def get(self, prop_id: int) -> float:
+        ...
+
+    def set(self, prop_id: int, value: float) -> bool:
+        ...
+
+
+class RealSenseColorCapture:
+    def __init__(self, serial: str = "", width: int = 640, height: int = 480, fps: int = 15) -> None:
+        try:
+            import numpy as np
+            import pyrealsense2 as rs2
+        except ImportError as exc:
+            raise ImportError("Install the Intel RealSense Python SDK first: pip install pyrealsense2") from exc
+
+        self._np = np
+        self._rs2 = rs2
+        self._fps = fps
+        self._format_name = "rgb8"
+        self._pipeline = rs2.pipeline()
+        self._config = rs2.config()
+        if serial:
+            self._config.enable_device(serial)
+        self._config.enable_stream(rs2.stream.color, width, height, rs2.format.rgb8, fps)
+        self._pipeline.start(self._config)
+        time.sleep(0.8)
+
+    def read(self):
+        try:
+            frames = self._pipeline.wait_for_frames(1000)
+        except RuntimeError:
+            return False, None
+
+        color_frame = frames.get_color_frame()
+        if not color_frame:
+            return False, None
+
+        frame = self._np.asanyarray(color_frame.get_data())
+        if self._format_name == "bgr8":
+            return True, frame
+        return True, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+    def release(self) -> None:
+        self._pipeline.stop()
+
+    def get(self, prop_id: int) -> float:
+        if prop_id == cv2.CAP_PROP_FPS:
+            return float(self._fps)
+        return 0.0
+
+    def set(self, prop_id: int, value: float) -> bool:
+        return False
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Compute the object-target distance when the object crosses the target center line."
     )
     parser.add_argument("--video", type=Path, help="Video file to process. If omitted, the script uses the camera.")
     parser.add_argument("--camera", type=int, default=0, help="Camera device index used when --video is omitted. Default: 0")
+    parser.add_argument("--realsense", action="store_true", help="Use the Intel RealSense color stream instead of a webcam.")
+    parser.add_argument("--realsense-serial", default="", help="Optional RealSense serial number. Default: first device.")
+    parser.add_argument("--realsense-fps", type=int, default=15, help="RealSense color stream FPS. Default: 15")
     parser.add_argument("--min-area", type=float, default=100.0, help="Ignore objects smaller than this pixel area. Default: 100")
     parser.add_argument("--object-low", type=int, nargs=3, default=DEFAULT_BLUE_LOW, metavar=("L", "A", "B"))
     parser.add_argument("--object-high", type=int, nargs=3, default=DEFAULT_BLUE_HIGH, metavar=("L", "A", "B"))
@@ -64,12 +128,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def open_capture(args: argparse.Namespace) -> cv2.VideoCapture:
+def open_capture(args: argparse.Namespace) -> FrameCapture:
+    if args.video and args.realsense:
+        raise ValueError("Use either --video or --realsense, not both.")
+
     if args.video:
         capture = cv2.VideoCapture(str(args.video))
         if not capture.isOpened():
             raise RuntimeError(f"Could not open video file: {args.video}")
         return capture
+
+    if args.realsense:
+        width = args.width or 640
+        height = args.height or 480
+        return RealSenseColorCapture(args.realsense_serial, width, height, args.realsense_fps)
 
     capture = cv2.VideoCapture(args.camera)
     if not capture.isOpened():
@@ -77,7 +149,7 @@ def open_capture(args: argparse.Namespace) -> cv2.VideoCapture:
     return capture
 
 
-def make_video_writer(output_video: Optional[Path], first_frame, capture: cv2.VideoCapture) -> Optional[cv2.VideoWriter]:
+def make_video_writer(output_video: Optional[Path], first_frame, capture: FrameCapture) -> Optional[cv2.VideoWriter]:
     if output_video is None:
         return None
 
