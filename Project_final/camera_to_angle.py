@@ -48,17 +48,26 @@ TARGET_HIGH = [255, 255, 255]
 MIN_AREA = 100.0
 
 
-THROW_PLAN_CSV = Path(__file__).resolve().parent / "notebooks" / "training_throuples.csv"
+TRAINING_CSV = Path(__file__).resolve().parent / "notebooks" / "training_data.csv"
 
-def load_throw_plan(csv_path):
-    "x -> angle_x, y1 -> y_backswing, y2 -> y_release"
+# Column names in the training CSV -- change these if the CSV schema changes.
+COL_PX = "px"
+COL_ANGLE_X = "x"
+COL_BACKSWING = "y1"
+COL_RELEASE = "y2"
+
+def load_training_data(csv_path):
+    """Loads (x_target, angle_x, y_backswing, y_release) columns from the training CSV."""
     with open(csv_path, newline="") as f:
         dialect = csv.Sniffer().sniff(f.readline(), delimiters="\t,")
         f.seek(0)
         reader = csv.DictReader(f, dialect=dialect)
-        return [(float(row["x"]), float(row["y1"]), float(row["y2"])) for row in reader]
-
-THROW_PLAN = load_throw_plan(THROW_PLAN_CSV) if THROW_PLAN_CSV.exists() else []
+        rows = [
+            (float(row[COL_PX]), float(row[COL_ANGLE_X]), float(row[COL_BACKSWING]), float(row[COL_RELEASE]))
+            for row in reader
+        ]
+    x_obs, x_cmd, backswing_cmd, release_cmd = (np.array(col) for col in zip(*rows))
+    return x_obs, x_cmd, backswing_cmd, release_cmd
 
 _cam = None
 _module = None
@@ -137,25 +146,6 @@ def throw_and_measure(angle_x, y_backswing, y_release):
     x = wait_for_landing_x()
     go_to_rest()
     return x
-
-def collect_data():
-    assert THROW_PLAN, f"THROW_PLAN empty -- place the training CSV in {THROW_PLAN_CSV}"
-
-    go_to_rest()
-    xs, x_cmd, backswing_cmd, release_cmd = [], [], [], []
-    for angle_x, y_backswing, y_release in THROW_PLAN:
-        command = wait_for_next_throw_command()
-        if command == "q":
-            break
-
-        x = throw_and_measure(angle_x, y_backswing, y_release)
-        if x is not None and np.isfinite(x):
-            xs.append(x)
-            x_cmd.append(angle_x)
-            backswing_cmd.append(y_backswing)
-            release_cmd.append(y_release)
-
-    return np.array(xs), np.array(x_cmd), np.array(backswing_cmd), np.array(release_cmd)
 
 def make_scaler(v):
     lo, hi = float(np.min(v)), float(np.max(v))
@@ -249,14 +239,18 @@ def predict_throw(x_target, model):
     return angle_x, y_backswing, y_release
 
 if __name__ == "__main__":
-    initialize_camera()
-    initialize_robot()
-
-    x_obs, x_cmd, backswing_cmd, release_cmd = collect_data()
-    np.savez("data_raw.npz", x=x_obs, angle_x=x_cmd, y_backswing=backswing_cmd, y_release=release_cmd)
+    # Training only needs the CSV -- no camera/robot required.
+    x_obs, x_cmd, backswing_cmd, release_cmd = load_training_data(TRAINING_CSV)
 
     model = train_model(x_obs, x_cmd, backswing_cmd, release_cmd)
     validate(model, x_obs, x_cmd, backswing_cmd, release_cmd)
 
     joblib.dump(model, MODEL_PATH)     # creates the model
     print(f"Model saved to {MODEL_PATH}")
+
+    # Manual testing (run interactively, e.g. in a console/notebook):
+    #   model = joblib.load(MODEL_PATH)
+    #   initialize_camera()
+    #   initialize_robot()
+    #   angle_x, y_backswing, y_release = predict_throw(x_target, model)
+    #   landing_x = throw_and_measure(angle_x, y_backswing, y_release)
