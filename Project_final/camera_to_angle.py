@@ -108,6 +108,22 @@ def wait_for_next_throw_command():
     time.sleep(RELOAD_WAIT_TIME)
     return input("Click enter to throw: q to quit").strip().lower()
 
+def get_target_x():
+    """Reads one frame and returns the target's current x (pixels), or raises if not visible."""
+    frame = ct.capture_image(_cam)
+    target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
+    if target_coordinates is None:
+        raise RuntimeError("Target not visible in the camera frame.")
+    return target_coordinates.center[0]
+
+def wait_for_target_x():
+    """Blocks (retrying) until the target is visible, then returns its x (pixels)."""
+    while True:
+        try:
+            return get_target_x()
+        except RuntimeError:
+            continue
+
 def wait_for_landing_x():
 
     previous_side = None
