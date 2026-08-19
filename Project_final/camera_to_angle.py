@@ -42,8 +42,8 @@ CATCH_TIMEOUT = 3.0  # seconds to watch the camera for a line crossing before gi
 # with the existing colorpicker for the actual ball/line colors in use.
 OBJECT_LOW = [61, 35, 0]
 OBJECT_HIGH = [253, 162, 121]
-TARGET_LOW = [0, 76, 145]
-TARGET_HIGH = [179, 140, 171]
+TARGET_LOW = [ 15, 145, 136]
+TARGET_HIGH = [255, 255, 255]
 MIN_AREA = 100.0
 
 

@@ -17,8 +17,8 @@ from detect_biggest_white_object import draw_annotation
 
 DEFAULT_BLUE_LOW = [0, 140, 112]
 DEFAULT_BLUE_HIGH = [136, 147, 125]
-DEFAULT_YELLOW_LOW = [30, 104, 127]
-DEFAULT_YELLOW_HIGH = [54, 108, 138]
+DEFAULT_YELLOW_LOW = [ 15, 145, 136]
+DEFAULT_YELLOW_HIGH = [255, 255, 255]
 
 
 def parse_args() -> argparse.Namespace:
