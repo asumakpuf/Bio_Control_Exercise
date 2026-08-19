@@ -15,10 +15,10 @@ from color_object_model import LargestColorObjectModel
 from detect_biggest_white_object import draw_annotation
 
 
-DEFAULT_BLUE_LOW = [61, 35, 0]
-DEFAULT_BLUE_HIGH = [253, 162, 121]
-DEFAULT_YELLOW_LOW = [0, 76, 145]
-DEFAULT_YELLOW_HIGH = [179, 140, 171]
+DEFAULT_BLUE_LOW = [0, 140, 112]
+DEFAULT_BLUE_HIGH = [136, 147, 125]
+DEFAULT_YELLOW_LOW = [30, 104, 127]
+DEFAULT_YELLOW_HIGH = [54, 108, 138]
 
 
 def parse_args() -> argparse.Namespace:
