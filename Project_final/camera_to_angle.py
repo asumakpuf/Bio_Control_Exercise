@@ -71,7 +71,9 @@ def initialize_camera():
     _cam = ct.prepare_camera()
     while True:
         frame = ct.capture_image(_cam)
-        if get_target_bounding_box_coordinates(frame, _target_model) is not None:
+        target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
+        if target_coordinates is not None:
+            print(f"Target detected: box={target_coordinates.box} center={target_coordinates.center}")
             break
 
 def initialize_robot(module=None):
@@ -118,11 +120,13 @@ def wait_for_landing_x():
             object_coordinates.box, line_y, previous_side, was_on_line
         )
         if crossed:
+            print(f"Ball crossed target line: box={object_coordinates.box} center={object_coordinates.center}")
             return object_coordinates.center[0]
 
     return None
 
 def throw_and_measure(angle_x, y_backswing, y_release):
+    print(f"Throw: angle_x={angle_x} y_backswing={y_backswing} y_release={y_release}")
     api.setSpeed(SPEED_1, SPEED_1, _module)
     move_joint(angle_x, y_backswing)
     time.sleep(settle_time)
@@ -135,7 +139,7 @@ def throw_and_measure(angle_x, y_backswing, y_release):
     return x
 
 def collect_data():
-    assert THROW_PLAN, f"THROW_PLAN esta vazio -- coloca o CSV de treino em {THROW_PLAN_CSV}"
+    assert THROW_PLAN, f"THROW_PLAN empty -- place the training CSV in {THROW_PLAN_CSV}"
 
     go_to_rest()
     xs, x_cmd, backswing_cmd, release_cmd = [], [], [], []
