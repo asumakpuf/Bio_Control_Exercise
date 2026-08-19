@@ -1,3 +1,4 @@
+import csv
 import sys
 import time
 from pathlib import Path
@@ -47,9 +48,17 @@ TARGET_HIGH = [255, 255, 255]
 MIN_AREA = 100.0
 
 
-THROW_PLAN = [
-    # (angle_x, y_backswing, y_release)
-]
+THROW_PLAN_CSV = Path(__file__).resolve().parent / "notebooks" / "training_throuples.csv"
+
+def load_throw_plan(csv_path):
+    "x -> angle_x, y1 -> y_backswing, y2 -> y_release"
+    with open(csv_path, newline="") as f:
+        dialect = csv.Sniffer().sniff(f.readline(), delimiters="\t,")
+        f.seek(0)
+        reader = csv.DictReader(f, dialect=dialect)
+        return [(float(row["x"]), float(row["y1"]), float(row["y2"])) for row in reader]
+
+THROW_PLAN = load_throw_plan(THROW_PLAN_CSV) if THROW_PLAN_CSV.exists() else []
 
 _cam = None
 _module = None
@@ -126,7 +135,7 @@ def throw_and_measure(angle_x, y_backswing, y_release):
     return x
 
 def collect_data():
-    assert THROW_PLAN, "THROW_PLAN empty"
+    assert THROW_PLAN, f"THROW_PLAN esta vazio -- coloca o CSV de treino em {THROW_PLAN_CSV}"
 
     go_to_rest()
     xs, x_cmd, backswing_cmd, release_cmd = [], [], [], []
