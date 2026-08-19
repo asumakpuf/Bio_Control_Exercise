@@ -1,4 +1,7 @@
+import sys
 import time
+from pathlib import Path
+
 import numpy as np
 from sklearn.neural_network import MLPRegressor
 from sklearn.model_selection import train_test_split
@@ -7,29 +10,51 @@ import matplotlib.pyplot as plt
 
 import camera_tools as ct
 from FableAPI.fable_init import api
+
+for _parent in Path(__file__).resolve().parents:
+    _candidate = _parent / "biggest_white_object_tracker"
+    if _candidate.is_dir():
+        if str(_candidate) not in sys.path:
+            sys.path.insert(0, str(_candidate))
+        break
+
+from color_object_model import LargestColorObjectModel
+from object_coordinates import get_object_coordinates, get_target_bounding_box_coordinates
+from distance_on_line_crossing import line_y_from_target, crossed_line
+
 theta_min, theta_max = -45, 45 #in degrees
 n_steps = 200 #number of steps for theta
 n_repeats = 2 #number of repeats for each theta value
 settle_time = 0.5
 MODEL_PATH   = "model.joblib"
-SPEED = 50 #joint speed, 1-100 percent
+SPEED_1 = 10 #joint speed, 1-100 percent
+SPEED_2 = 100 #joint speed, 1-100 percent
+
+BACKSWING_Y = -30
+RELEASE_Y = 60
+CATCH_TIMEOUT = 3.0  # seconds to watch the camera for a line crossing before giving up
+
+OBJECT_LOW = [61, 35, 0]
+OBJECT_HIGH = [253, 162, 121]
+TARGET_LOW = [0, 76, 145]
+TARGET_HIGH = [179, 140, 171]
+MIN_AREA = 100.0
 
 _cam = None
 _module = None
+_object_model = LargestColorObjectModel(OBJECT_LOW, OBJECT_HIGH, MIN_AREA, label_id=0)
+_target_model = LargestColorObjectModel(TARGET_LOW, TARGET_HIGH, MIN_AREA, label_id=1)
 
 
 def initialize_camera():
-    """Opens the camera and waits until the target is visible."""
     global _cam
     _cam = ct.prepare_camera()
     while True:
         frame = ct.capture_image(_cam)
-        x, _ = ct.locate(frame)
-        if x is not None:
+        if get_target_bounding_box_coordinates(frame, _target_model) is not None:
             break
 
 def initialize_robot(module=None):
-    """Connects to the dongle and selects the Fable module to control."""
     global _module
     api.setup(blocking=True)
     moduleids = api.discoverModules()
@@ -41,36 +66,50 @@ def initialize_robot(module=None):
     api.setPos(0, 0, _module)
     api.sleep(0.5)
 
-def move_joint(theta_deg:float)-> None:
-    """
-    Commands the Fable joint to move a specified angle in degrees.
-    """
-    api.setPos(theta_deg, 0, _module)
+def move_joint(x_deg: float, y_deg: float = 0.0) -> None:
 
-def read_target_x()-> float:
-    """
-    Reads the current x position of the target from the camera.
-    """
-    frame = ct.capture_image(_cam)
-    x, _ = ct.locate(frame)
-    return x
+    api.setPos(x_deg, y_deg, _module)
+
+def wait_for_landing_x():
+
+    previous_side = None
+    was_on_line = False
+    deadline = time.time() + CATCH_TIMEOUT
+
+    while time.time() < deadline:
+        frame = ct.capture_image(_cam)
+        target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
+        object_coordinates = get_object_coordinates(frame, _object_model)
+
+        if target_coordinates is None or object_coordinates is None:
+            previous_side = None
+            was_on_line = False
+            continue
+
+        line_y = line_y_from_target(target_coordinates)
+        crossed, previous_side, was_on_line = crossed_line(
+            object_coordinates.box, line_y, previous_side, was_on_line
+        )
+        if crossed:
+            return object_coordinates.center[0]
+
+    return None
+
+def throw_and_measure(theta_deg):
+
+    move_joint(theta_deg, BACKSWING_Y)
+    time.sleep(settle_time)
+    move_joint(theta_deg, RELEASE_Y)
+    return wait_for_landing_x()
 
 def collect_data():
-    """
-    Collects data by moving the joint through a range of angles and
-    recording the corresponding x positions.
-    Returns:
-        xs: np.ndarray of x positions
-        thetas: np.ndarray of corresponding angles
-    """
+
     angles = np.linspace(theta_min, theta_max, n_steps)
     xs, thetas = [], []
     for r in range(n_repeats):
         sweep = angles if r % 2 == 0 else angles[::-1]  # Alternate sweep direction
         for theta in sweep:
-            move_joint(theta)
-            time.sleep(settle_time)
-            x = read_target_x()
+            x = throw_and_measure(theta)
             if x is not None and np.isfinite(x):
                 xs.append(x)
                 thetas.append(theta)
