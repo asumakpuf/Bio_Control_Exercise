@@ -87,3 +87,24 @@ def warmup(cmac, get_target_x, time_of_flight, duration=30.0, poll_interval=0.5,
     # time_of_flight seconds for the "true" value, to stay consistent with
     # what the model was just trained on.
     return list(buffer)[-3:], times, y_true, y_pred
+
+
+def sample_window(get_target_x, poll_interval):
+    """
+    Samples get_target_x() 3 times, poll_interval seconds apart, and returns
+    them as [x1, x2, x3].
+
+    This is the same poll_interval-spaced sampling warmup() uses to build its
+    (x1, x2, x3) windows -- use it wherever a fresh window is needed (e.g.
+    right before each live prediction) so the CMAC always sees inputs spaced
+    the way it was trained on, instead of e.g. splicing in a sample that's
+    time_of_flight seconds newer.
+    """
+    window = []
+    for i in range(3):
+        step_start = time.time()
+        window.append(get_target_x())
+        if i < 2:
+            elapsed = time.time() - step_start
+            time.sleep(max(0.0, poll_interval - elapsed))
+    return window

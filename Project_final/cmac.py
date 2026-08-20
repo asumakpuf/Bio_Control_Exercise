@@ -15,7 +15,24 @@ This follows the same equations as the course material (Exercises 2.5/2.6):
 Only extended from 2 inputs to 3 inputs. Nothing else about the math changes.
 """
 
+import joblib
 import numpy as np
+
+DEFAULT_WEIGHTS_PATH = "cmac_weights.joblib"
+
+
+def padded_input_range(low, high, n_centers):
+    """
+    Pads (low, high) by one center-spacing on each side, so a CMAC3 built with
+    this range gives receptive fields at the true boundary values real
+    neighbors on both sides instead of interpolating from only one direction.
+
+    Without this, predictions right at the edge of the observed range are
+    systematically weaker -- see notebooks/test_cmac_pingpong.ipynb, where both
+    prediction misses were sequences ending at the range boundary (pixel 462).
+    """
+    margin = (high - low) / (n_centers - 1)
+    return low - margin, high + margin
 
 
 class CMAC3:
@@ -98,6 +115,15 @@ class CMAC3:
         error : y_true - y_hat
         """
         self.weights += self.beta * error * B
+
+    def save(self, path=DEFAULT_WEIGHTS_PATH):
+        """Persists the whole trained CMAC (centers, sigma, weights, ...) to disk."""
+        joblib.dump(self, path)
+
+    @staticmethod
+    def load(path=DEFAULT_WEIGHTS_PATH):
+        """Loads a CMAC3 previously saved with .save() -- e.g. by train_cmac.py."""
+        return joblib.load(path)
 
 
 def run_demo():

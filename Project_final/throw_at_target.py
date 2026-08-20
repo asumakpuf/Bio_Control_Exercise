@@ -6,6 +6,8 @@ Also times the throw with the microphone: since the camera-based landing
 detection isn't reliable yet, we listen for the "thud" of the ball hitting
 the table and use that instant as the landing time instead.
 """
+import contextlib
+import os
 import threading
 import time
 
@@ -24,6 +26,26 @@ AUDIO_IMPACT_THRESHOLD = 150.0
 IMPACT_TIMEOUT = 5.0  # seconds to listen for an impact before giving up
 
 
+@contextlib.contextmanager
+def _quiet_stderr():
+    """
+    Silences the ALSA/JACK "unable to open slave" / "jack server is not
+    running" spam that PortAudio prints straight to the raw stderr file
+    descriptor when pyaudio.PyAudio() is constructed. Those come from the C
+    libraries below PyAudio, so redirecting sys.stderr in Python wouldn't
+    catch them -- fd 2 itself has to be pointed at /dev/null instead.
+    """
+    stderr_fd = 2
+    with open(os.devnull, "w") as devnull:
+        saved_fd = os.dup(stderr_fd)
+        try:
+            os.dup2(devnull.fileno(), stderr_fd)
+            yield
+        finally:
+            os.dup2(saved_fd, stderr_fd)
+            os.close(saved_fd)
+
+
 def _chunk_rms(stream):
     data = stream.read(AUDIO_CHUNK, exception_on_overflow=False)
     samples = np.frombuffer(data, dtype=np.int16).astype(np.float32)
@@ -32,7 +54,8 @@ def _chunk_rms(stream):
 
 def print_mic_levels(duration=10.0):
     """Prints live microphone RMS levels -- use this to pick AUDIO_IMPACT_THRESHOLD."""
-    pa = pyaudio.PyAudio()
+    with _quiet_stderr():
+        pa = pyaudio.PyAudio()
     stream = pa.open(format=pyaudio.paInt16, channels=1, rate=AUDIO_RATE, input=True, frames_per_buffer=AUDIO_CHUNK)
     try:
         deadline = time.time() + duration
@@ -57,7 +80,8 @@ def detect_impact(release_event, timeout=IMPACT_TIMEOUT):
     the timeout once the release has actually happened. This is what keeps
     the backswing/wind-up motor noise from being mistaken for the impact.
     """
-    pa = pyaudio.PyAudio()
+    with _quiet_stderr():
+        pa = pyaudio.PyAudio()
     stream = pa.open(format=pyaudio.paInt16, channels=1, rate=AUDIO_RATE, input=True, frames_per_buffer=AUDIO_CHUNK)
     try:
         deadline = None

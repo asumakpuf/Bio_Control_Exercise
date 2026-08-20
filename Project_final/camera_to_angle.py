@@ -38,12 +38,17 @@ RELEASE_MIN, RELEASE_MAX = 35, 60        # degrees, posY release
 REST_X, REST_Y = 0, -30
 RELOAD_WAIT_TIME = 10.0  # seconds to pause at rest before prompting for the next throw
 
-settle_time = 1.5
+settle_time = 0.5  # trimmed down from 1.5s so the whole throw_and_measure() cycle fits inside
+                    # TIME_OF_FLIGHT (main.py pads out any remainder -- see the live loop there).
+                    # If throws start looking weak/truncated, the arm isn't getting enough time
+                    # to complete its swing -- bump this back up.
 MODEL_PATH = "model.joblib"
-SPEED_1 = 10   # slow speed for the backswing wind-up
+REST_SPEED = 10
+SPEED_1 = 5   # slow speed for the backswing wind-up
 SPEED_2 = 100  # fast speed for the release
 
-CATCH_TIMEOUT = 3.0  # seconds to watch the camera for a line crossing before giving up
+CATCH_TIMEOUT = 1.5  # seconds to watch the camera for a line crossing before giving up
+                      # (trimmed from 3.0s for the same reason as settle_time above)
 MIN_FLIGHT_TIME = 0.3  # seconds after the release command during which crossings are ignored
                         # (guards against the launcher arm/cup itself sweeping past the target
                         # row before the ball is actually released -- tune this to how long the
@@ -57,12 +62,12 @@ PREVIEW_WINDOW = "camera_to_angle: live view"
 # with the existing colorpicker for the actual ball/line colors in use.
 OBJECT_LOW = [ 69, 121,  93]
 OBJECT_HIGH = [ 98, 145, 118]
-TARGET_LOW = [ 15, 145, 136]
-TARGET_HIGH = [255, 255, 255]
+TARGET_LOW = [ 0, 149, 0]
+TARGET_HIGH = [184, 231, 168]
 MIN_AREA = 100.0
 
 
-TRAINING_CSV = Path(__file__).resolve().parent / "notebooks" / "training_data.csv"
+TRAINING_CSV = Path(__file__).resolve().parent / "notebooks" / "training_data_seven_pchip.csv"
 
 # Column names in the training CSV -- change these if the CSV schema changes.
 COL_PX = "px"
@@ -154,7 +159,7 @@ def move_joint(x_deg: float, y_deg: float = 0.0) -> None:
     api.setPos(x_deg, y_deg, _module)
 
 def go_to_rest():
-    api.setSpeed(SPEED_1, SPEED_1, _module)
+    api.setSpeed(REST_SPEED, REST_SPEED, _module)
     move_joint(REST_X, REST_Y)
 
 def _idle_preview(duration):
@@ -231,23 +236,29 @@ def wait_for_landing_x():
     return None
 
 def throw_and_measure(angle_x, y_backswing, y_release, on_release=None):
+
     print(f"Throw: angle_x={angle_x} y_backswing={y_backswing} y_release={y_release}")
     api.setSpeed(SPEED_1, SPEED_1, _module)
     go_to_rest()
     time.sleep(settle_time)
     move_joint(angle_x, y_backswing)
     time.sleep(settle_time)
-
     api.setSpeed(SPEED_2, SPEED_2, _module)
     move_joint(angle_x, y_release)
     if on_release is not None:
         on_release()  # let the caller know the release command was just sent
                        # (e.g. to start trusting mic input for impact detection)
-    time.sleep(settle_time)
-    go_to_rest()
+    print(f"target coo")
 
+    # Watch for the crossing right after release -- NOT after settling/going
+    # back to rest, or the ball has already landed and left frame by the time
+    # this starts watching (MIN_FLIGHT_TIME below exists precisely to ignore
+    # the launcher arm/cup itself sweeping past in the first moments here).
     x = wait_for_landing_x()
 
+    # No trailing settle/go_to_rest here on purpose: the caller (main.py) measures
+    # x_true right after this returns, to keep the x3->x_true horizon close to
+    # TIME_OF_FLIGHT -- it calls go_to_rest() itself once that's captured.
     return x
 
 def make_scaler(v):
