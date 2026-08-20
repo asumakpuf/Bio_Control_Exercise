@@ -30,6 +30,9 @@ from distance_on_line_crossing import (
     draw_line,
 )
 
+from purple_ball_tracker import BallTrackerConfig, PurpleBallTracker, draw_debug_overlay, draw_path
+from camera_settings import load_camera_settings, apply_webcam_settings, SETTINGS_PATH
+
 # Safe/expected ranges for each commanded angle, used to clip NN predictions.
 ANGLE_X_MIN, ANGLE_X_MAX = -45, 45       # degrees, posX
 BACKSWING_MIN, BACKSWING_MAX = -60, -30  # degrees, posY wind-up
@@ -92,6 +95,9 @@ _cam = None
 _module = None
 _object_model = LargestColorObjectModel(OBJECT_LOW, OBJECT_HIGH, MIN_AREA, label_id=0)
 _target_model = LargestColorObjectModel(TARGET_LOW, TARGET_HIGH, MIN_AREA, label_id=1)
+# Kalman-based alternative to _object_model for the ball specifically -- more robust to
+# motion blur/partial occlusion mid-flight. Reuses the same LAB thresholds as _object_model.
+_ball_tracker = PurpleBallTracker(BallTrackerConfig(low_color=OBJECT_LOW, high_color=OBJECT_HIGH))
 
 
 def show_preview(frame, target_coordinates=None, object_coordinates=None):
@@ -131,10 +137,34 @@ def close_preview():
         for _ in range(4):  # flush pending GUI events so the window actually closes
             cv2.waitKey(1)
 
+def _apply_persisted_camera_settings(cam):
+    """
+    Applies camera_control_settings.json (saved via the notebook's Live Camera
+    Control Panel) to `cam` -- width/height/fps plus exposure/gain/white-balance/
+    brightness/contrast/saturation. No-op (with a warning) if the file doesn't
+    exist yet, e.g. on a machine/webcam that hasn't been calibrated.
+    """
+    settings = load_camera_settings()
+    if settings is None:
+        print(f"No saved camera settings found at {SETTINGS_PATH} -- using camera "
+              f"defaults. Calibrate with the notebook's Live Camera Control Panel "
+              f"(camera_control_panel()) and click Save settings.")
+        return
+
+    for prop, key in (
+        (cv2.CAP_PROP_FRAME_WIDTH, "width"),
+        (cv2.CAP_PROP_FRAME_HEIGHT, "height"),
+        (cv2.CAP_PROP_FPS, "fps"),
+    ):
+        if settings.get(key) is not None:
+            cam.set(prop, settings[key])
+    apply_webcam_settings(cam, settings)
+
 def initialize_camera():
     global _cam
     _cam = ct.prepare_camera()  # laptop webcam (cv2.VideoCapture(0)); RealSenseColorCapture
                                  # from distance_on_line_crossing is the alternative if switching back
+    _apply_persisted_camera_settings(_cam)
     while True:
         frame = ct.capture_image(_cam)
         target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
@@ -235,7 +265,82 @@ def wait_for_landing_x():
 
     return None
 
-def throw_and_measure(angle_x, y_backswing, y_release, on_release=None):
+def _track_box(track):
+    """Approximates an (x, y, width, height) box for a PurpleBallTracker BallTrack, for
+    crossed_line() -- uses the detection candidate's real box when available (DETECTED/
+    RECOVERED/CONFIRMING states), falling back to a box synthesized from the Kalman
+    center+radius when the track is coasting on prediction alone (TRACKED/RECOVERY)."""
+    if track.candidate is not None:
+        return track.candidate.box
+    cx, cy = track.center
+    r = track.radius
+    return (int(round(cx - r)), int(round(cy - r)), int(round(2 * r)), int(round(2 * r)))
+
+def _wait_for_landing_x_tracked_core():
+    """
+    Shared implementation behind wait_for_landing_x_tracked() and
+    wait_for_landing_x_and_target_tracked(). Detects the ball with the
+    Kalman-based PurpleBallTracker (_ball_tracker) instead of the single-frame
+    LargestColorObjectModel -- more robust to motion blur/partial occlusion
+    during the actual flight. The target's line_y is still tracked dynamically
+    via _target_model, same as wait_for_landing_x().
+
+    Returns (landing_x, x_target) read off the SAME frame the crossing was
+    detected on -- not two separate camera reads at two different instants --
+    or (None, None) if nothing crossed within CATCH_TIMEOUT.
+    """
+    previous_side = None
+    was_on_line = False
+    start = time.time()
+    deadline = start + CATCH_TIMEOUT
+
+    while time.time() < deadline:
+        frame = ct.capture_image(_cam)
+        target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
+        track, candidates, mask = _ball_tracker.update(frame)
+
+        # Ball/Kalman debug overlay (candidates, confirmation state, predicted center,
+        # recent path) drawn first, then the target box/line on top of that via show_preview.
+        preview = draw_debug_overlay(frame, track, candidates, mask, _ball_tracker.config, show_mask=False)
+        preview = draw_path(preview, _ball_tracker.path)
+
+        if target_coordinates is None or track is None or not track.confirmed:
+            show_preview(preview, target_coordinates=target_coordinates)
+            previous_side = None
+            was_on_line = False
+            continue
+
+        line_y = line_y_from_target(target_coordinates)
+        crossed, previous_side, was_on_line = crossed_line(
+            _track_box(track), line_y, previous_side, was_on_line
+        )
+        if crossed and (time.time() - start) >= MIN_FLIGHT_TIME:
+            print(f"Ball crossed target line (tracked): box={_track_box(track)} "
+                  f"center={track.center} target_x={target_coordinates.center[0]:.1f}")
+            cv2.putText(preview, "CROSSED", (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 255), 3, cv2.LINE_AA)
+            show_preview(preview, target_coordinates=target_coordinates)
+            return track.center[0], target_coordinates.center[0]
+
+        show_preview(preview, target_coordinates=target_coordinates)
+
+    return None, None
+
+def wait_for_landing_x_tracked():
+    """Like wait_for_landing_x(), but via the tracked (PurpleBallTracker) detector."""
+    landing_x, _x_target = _wait_for_landing_x_tracked_core()
+    return landing_x
+
+def wait_for_landing_x_and_target_tracked():
+    """
+    Like wait_for_landing_x_tracked(), but also returns the target's x from the
+    exact same frame the crossing was detected on: (landing_x, x_target), or
+    (None, None) on timeout. Used by main.py to get both the CMAC's "true"
+    target position and the PD controller's landing error from one single,
+    simultaneous measurement instead of two separate camera reads.
+    """
+    return _wait_for_landing_x_tracked_core()
+
+def throw_and_measure(angle_x, y_backswing, y_release, on_release=None, landing_fn=wait_for_landing_x):
 
     print(f"Throw: angle_x={angle_x} y_backswing={y_backswing} y_release={y_release}")
     api.setSpeed(SPEED_1, SPEED_1, _module)
@@ -254,7 +359,7 @@ def throw_and_measure(angle_x, y_backswing, y_release, on_release=None):
     # back to rest, or the ball has already landed and left frame by the time
     # this starts watching (MIN_FLIGHT_TIME below exists precisely to ignore
     # the launcher arm/cup itself sweeping past in the first moments here).
-    x = wait_for_landing_x()
+    x = landing_fn()
 
     # No trailing settle/go_to_rest here on purpose: the caller (main.py) measures
     # x_true right after this returns, to keep the x3->x_true horizon close to
