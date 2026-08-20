@@ -1,0 +1,14 @@
+{
+  "auto_exposure": true,
+  "auto_wb": true,
+  "brightness": 102.0,
+  "contrast": 27.0,
+  "exposure": -9.5,
+  "fps": 30,
+  "gain": 96.0,
+  "height": 480,
+  "saturation": 64.0,
+  "webcam_index": 0,
+  "white_balance": 3700.0,
+  "width": 640
+}
