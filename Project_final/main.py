@@ -9,10 +9,11 @@ from cmac import CMAC3
 from cmac_warmup import warmup
 
 N_CENTERS = 9
-TIME_OF_FLIGHT = 0.8    # seconds -- fixed estimate of ball flight time, tune on the robot
-WARMUP_DURATION = 30.0  # seconds of prediction-only CMAC warm-up before throwing
-MSE_WINDOW = 20         # samples compared at the start vs. end of the run, to check learning
-
+TIME_OF_FLIGHT = 3.0   # seconds -- fixed estimate of ball flight time, tune on the robot
+WARMUP_DURATION = 60.0  # seconds of prediction-only CMAC warm-up before throwing
+POLL_INTERVAL = 0.5    # seconds between buffered target samples during warm-up
+                        # (independent of TIME_OF_FLIGHT -- see cmac_warmup.warmup)
+MSE_WINDOW = 20         # number of predictions compared first-vs-last in report_learning
 
 def plot_prediction(times, y_true, y_pred):
     """Plot the CMAC's predicted vs. true target trajectory, and the error, over time."""
@@ -40,7 +41,7 @@ def plot_prediction(times, y_true, y_pred):
 
 
 def report_learning(y_true, y_pred, window=MSE_WINDOW):
-    """Prints MSE over the first vs. last `window` predictions, to check the CMAC is learning."""
+    """Prints MSE over the first vs. last window predictions, to check the CMAC is learning."""
     errors_sq = (np.array(y_true) - np.array(y_pred)) ** 2
 
     if len(errors_sq) < 2 * window:
@@ -65,14 +66,15 @@ def main():
 
     start_time = time.time()
     window, times, y_true, y_pred = warmup(
-        cmac, cta.wait_for_target_x, TIME_OF_FLIGHT, WARMUP_DURATION, start_time=start_time
+        cmac, cta.wait_for_target_x, TIME_OF_FLIGHT, WARMUP_DURATION,
+        poll_interval=POLL_INTERVAL, start_time=start_time
     )
     report_learning(y_true, y_pred)
 
     landing_errors = []
     while True:
         command = cta.wait_for_next_throw_command()
-        if command == "q":
+        if command in ("q", "f"):
             break
 
         x1, x2, x3 = window
@@ -80,7 +82,6 @@ def main():
 
         angle_x, y_backswing, y_release = cta.predict_throw(x_hat, model)
         landing_x = cta.throw_and_measure(angle_x, y_backswing, y_release)
-
         x_true = cta.wait_for_target_x()
         error = x_true - x_hat
         cmac.update(B, error)

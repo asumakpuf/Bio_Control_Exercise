@@ -15,8 +15,8 @@ from color_object_model import LargestColorObjectModel
 from detect_biggest_white_object import draw_annotation
 
 
-DEFAULT_BLUE_LOW = [0, 140, 112]
-DEFAULT_BLUE_HIGH = [136, 147, 125]
+DEFAULT_BLUE_LOW = [ 69, 121,  93]
+DEFAULT_BLUE_HIGH = [ 98, 145, 118]
 DEFAULT_YELLOW_LOW = [ 15, 145, 136]
 DEFAULT_YELLOW_HIGH = [255, 255, 255]
 

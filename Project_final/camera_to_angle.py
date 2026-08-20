@@ -1,8 +1,10 @@
 import csv
+import select
 import sys
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 from sklearn.neural_network import MLPRegressor
 from sklearn.model_selection import train_test_split
@@ -21,7 +23,12 @@ for _parent in Path(__file__).resolve().parents:
 
 from color_object_model import LargestColorObjectModel
 from object_coordinates import get_object_coordinates, get_target_bounding_box_coordinates
-from distance_on_line_crossing import line_y_from_target, crossed_line
+from distance_on_line_crossing import (
+    line_y_from_target,
+    crossed_line,
+    draw_annotation,
+    draw_line,
+)
 
 # Safe/expected ranges for each commanded angle, used to clip NN predictions.
 ANGLE_X_MIN, ANGLE_X_MAX = -45, 45       # degrees, posX
@@ -31,18 +38,25 @@ RELEASE_MIN, RELEASE_MAX = 35, 60        # degrees, posY release
 REST_X, REST_Y = 0, -30
 RELOAD_WAIT_TIME = 10.0  # seconds to pause at rest before prompting for the next throw
 
-settle_time = 0.5
+settle_time = 1.5
 MODEL_PATH = "model.joblib"
 SPEED_1 = 10   # slow speed for the backswing wind-up
 SPEED_2 = 100  # fast speed for the release
 
 CATCH_TIMEOUT = 3.0  # seconds to watch the camera for a line crossing before giving up
+MIN_FLIGHT_TIME = 0.3  # seconds after the release command during which crossings are ignored
+                        # (guards against the launcher arm/cup itself sweeping past the target
+                        # row before the ball is actually released -- tune this to how long the
+                        # backswing->release swing actually takes on your rig)
+
+SHOW_PREVIEW = True  # live cv2 window of what the camera sees; set False for headless runs
+PREVIEW_WINDOW = "camera_to_angle: live view"
 
 # LAB thresholds for the ball ("object") and the target line ("target").
 # Defaults copied from biggest_white_object_tracker/track_camera.py -- recalibrate
 # with the existing colorpicker for the actual ball/line colors in use.
-OBJECT_LOW = [61, 35, 0]
-OBJECT_HIGH = [253, 162, 121]
+OBJECT_LOW = [ 69, 121,  93]
+OBJECT_HIGH = [ 98, 145, 118]
 TARGET_LOW = [ 15, 145, 136]
 TARGET_HIGH = [255, 255, 255]
 MIN_AREA = 100.0
@@ -75,12 +89,51 @@ _object_model = LargestColorObjectModel(OBJECT_LOW, OBJECT_HIGH, MIN_AREA, label
 _target_model = LargestColorObjectModel(TARGET_LOW, TARGET_HIGH, MIN_AREA, label_id=1)
 
 
+def show_preview(frame, target_coordinates=None, object_coordinates=None):
+    "Draw the current detections over the frame and show it in a live cv2 window."
+    if not SHOW_PREVIEW:
+        return
+
+    preview = frame
+    if target_coordinates is not None:
+        preview = draw_annotation(
+            preview,
+            target_coordinates.box,
+            target_coordinates.normalized_box,
+            target_coordinates.area,
+            target_coordinates.label_id,
+            label="target",
+            box_color=(0, 255, 255),
+        )
+        draw_line(preview, target_coordinates)
+    if object_coordinates is not None:
+        preview = draw_annotation(
+            preview,
+            object_coordinates.box,
+            object_coordinates.normalized_box,
+            object_coordinates.area,
+            object_coordinates.label_id,
+            label="object",
+            box_color=(255, 0, 0),
+        )
+
+    cv2.imshow(PREVIEW_WINDOW, preview)
+    cv2.waitKey(1)  # lets the window actually repaint; does not block/pause the script
+
+def close_preview():
+    if SHOW_PREVIEW:
+        cv2.destroyAllWindows()
+        for _ in range(4):  # flush pending GUI events so the window actually closes
+            cv2.waitKey(1)
+
 def initialize_camera():
     global _cam
-    _cam = ct.prepare_camera()
+    _cam = ct.prepare_camera()  # laptop webcam (cv2.VideoCapture(0)); RealSenseColorCapture
+                                 # from distance_on_line_crossing is the alternative if switching back
     while True:
         frame = ct.capture_image(_cam)
         target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
+        show_preview(frame, target_coordinates=target_coordinates)
         if target_coordinates is not None:
             print(f"Target detected: box={target_coordinates.box} center={target_coordinates.center}")
             break
@@ -104,9 +157,31 @@ def go_to_rest():
     api.setSpeed(SPEED_1, SPEED_1, _module)
     move_joint(REST_X, REST_Y)
 
+def _idle_preview(duration):
+    "Keep showing the live feed (and pumping the cv2 window) instead of a blind time.sleep."
+    if not SHOW_PREVIEW:
+        time.sleep(duration)
+        return
+    deadline = time.time() + duration
+    while time.time() < deadline:
+        frame = ct.capture_image(_cam)
+        show_preview(frame)
+
+def _input_with_preview(prompt):
+    "input() that keeps pumping the preview window while it waits on stdin, so cv2 doesn't hang."
+    print(prompt, end="", flush=True)
+    if not SHOW_PREVIEW:
+        return input()
+    while True:
+        frame = ct.capture_image(_cam)
+        show_preview(frame)
+        ready, _, _ = select.select([sys.stdin], [], [], 0)
+        if ready:
+            return sys.stdin.readline().rstrip("\n")
+
 def wait_for_next_throw_command():
-    time.sleep(RELOAD_WAIT_TIME)
-    return input("Click enter to throw: q to quit").strip().lower()
+    _idle_preview(RELOAD_WAIT_TIME)
+    return _input_with_preview("Click enter to throw: q to quit, f to finish and report").strip().lower()
 
 def get_target_x():
     """Reads one frame and returns the target's current x (pixels), or raises if not visible."""
@@ -128,12 +203,14 @@ def wait_for_landing_x():
 
     previous_side = None
     was_on_line = False
-    deadline = time.time() + CATCH_TIMEOUT
+    start = time.time()
+    deadline = start + CATCH_TIMEOUT
 
     while time.time() < deadline:
         frame = ct.capture_image(_cam)
         target_coordinates = get_target_bounding_box_coordinates(frame, _target_model)
         object_coordinates = get_object_coordinates(frame, _object_model)
+        show_preview(frame, target_coordinates=target_coordinates, object_coordinates=object_coordinates)
 
         if target_coordinates is None or object_coordinates is None:
             previous_side = None
@@ -144,23 +221,33 @@ def wait_for_landing_x():
         crossed, previous_side, was_on_line = crossed_line(
             object_coordinates.box, line_y, previous_side, was_on_line
         )
-        if crossed:
+        # Ignore crossings in the first MIN_FLIGHT_TIME seconds: the ball physically cannot
+        # have reached the target yet, so this is almost always the launcher arm/cup itself
+        # sweeping past the target's row while it's still mid-swing, not a real throw.
+        if crossed and (time.time() - start) >= MIN_FLIGHT_TIME:
             print(f"Ball crossed target line: box={object_coordinates.box} center={object_coordinates.center}")
             return object_coordinates.center[0]
 
     return None
 
-def throw_and_measure(angle_x, y_backswing, y_release):
+def throw_and_measure(angle_x, y_backswing, y_release, on_release=None):
     print(f"Throw: angle_x={angle_x} y_backswing={y_backswing} y_release={y_release}")
     api.setSpeed(SPEED_1, SPEED_1, _module)
+    go_to_rest()
+    time.sleep(settle_time)
     move_joint(angle_x, y_backswing)
     time.sleep(settle_time)
 
     api.setSpeed(SPEED_2, SPEED_2, _module)
     move_joint(angle_x, y_release)
+    if on_release is not None:
+        on_release()  # let the caller know the release command was just sent
+                       # (e.g. to start trusting mic input for impact detection)
+    time.sleep(settle_time)
+    go_to_rest()
 
     x = wait_for_landing_x()
-    go_to_rest()
+
     return x
 
 def make_scaler(v):

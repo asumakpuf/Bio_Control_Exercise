@@ -184,7 +184,11 @@ def crossed_line(
 ) -> tuple[bool, int, bool]:
     side = box_line_side(object_box, line_y)
     is_on_line = side == 0
-    crossed = (is_on_line and not was_on_line) or (
+    # previous_side is None means we haven't tracked a real prior frame yet (e.g. this is
+    # the first frame polled, or the object/target just reappeared after being lost) --
+    # don't count that as a crossing just because the object happens to be on the line
+    # the first time we look.
+    crossed = (is_on_line and not was_on_line and previous_side is not None) or (
         previous_side is not None and side != 0 and previous_side != 0 and side != previous_side
     )
     return crossed, side, is_on_line
